@@ -50,6 +50,12 @@ jobs:
           (cd cmd/gophermart && go build -buildvcs=false -o gophermart)
           (cd cmd/accrual && chmod +x accrual_linux_amd64)
 
+      - name: Run database migrations
+        env:
+          DB_DSN: "postgres://postgres:postgres@postgres/praktikum?sslmode=disable"
+        run: |
+          make migrate-up
+
       - name: Test
         run: |
           gophermarttest \
