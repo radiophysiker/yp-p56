@@ -3,48 +3,60 @@ package service
 import (
 	"context"
 
+	"github.com/radiophysiker/d56/internal/domain"
 	"github.com/radiophysiker/d56/internal/domain/user"
 	"github.com/radiophysiker/d56/internal/domain/withdrawal"
 )
 
 type WithdrawalService struct {
-	withdrawalRepo withdrawal.Repository
-	userRepo       user.Repository
+	uowFactory domain.UnitOfWorkFactory
 }
 
-func NewWithdrawalService(withdrawalRepo withdrawal.Repository, userRepo user.Repository) *WithdrawalService {
+func NewWithdrawalService(uowFactory domain.UnitOfWorkFactory) *WithdrawalService {
 	return &WithdrawalService{
-		withdrawalRepo: withdrawalRepo,
-		userRepo:       userRepo,
+		uowFactory: uowFactory,
 	}
 }
 
 func (s *WithdrawalService) WithdrawFunds(ctx context.Context, userID user.UserID, orderNumber string, amount float64) (*withdrawal.Withdrawal, error) {
-	w, err := withdrawal.New(userID, orderNumber, amount)
-	if err != nil {
-		return nil, err
-	}
+	var result *withdrawal.Withdrawal
 
-	user, err := s.userRepo.FindByID(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
+	err := ExecuteInTransaction(ctx, s.uowFactory, func(ctx context.Context, uow domain.UnitOfWork) error {
+		w, err := withdrawal.New(userID, orderNumber, amount)
+		if err != nil {
+			return err
+		}
 
-	if err := user.WithdrawBalance(amount); err != nil {
-		return nil, err
-	}
+		user, err := uow.UserRepository().FindByID(ctx, userID)
+		if err != nil {
+			return err
+		}
 
-	if err := s.userRepo.Update(ctx, user); err != nil {
-		return nil, err
-	}
+		if err := user.WithdrawBalance(amount); err != nil {
+			return err
+		}
 
-	if err := s.withdrawalRepo.Save(ctx, w); err != nil {
-		return nil, err
-	}
+		if err := uow.UserRepository().Update(ctx, user); err != nil {
+			return err
+		}
 
-	return w, nil
+		if err := uow.WithdrawalRepository().Save(ctx, w); err != nil {
+			return err
+		}
+
+		result = w
+		return nil
+	})
+
+	return result, err
 }
 
 func (s *WithdrawalService) GetUserWithdrawals(ctx context.Context, userID user.UserID) ([]*withdrawal.Withdrawal, error) {
-	return s.withdrawalRepo.FindByUserID(ctx, userID)
+	uow, err := s.uowFactory.Create(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer uow.Close()
+
+	return uow.WithdrawalRepository().FindByUserID(ctx, userID)
 }

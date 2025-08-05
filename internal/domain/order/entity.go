@@ -25,6 +25,7 @@ type Order struct {
 	accrual     *float64
 	uploadedAt  time.Time
 	processedAt *time.Time
+	version     int64
 }
 
 func New(userID user.UserID, number string) (*Order, error) {
@@ -45,6 +46,7 @@ func New(userID user.UserID, number string) (*Order, error) {
 		number:     number,
 		status:     StatusNew,
 		uploadedAt: time.Now(),
+		version:    1,
 	}, nil
 }
 
@@ -76,12 +78,30 @@ func (o *Order) ProcessedAt() *time.Time {
 	return o.processedAt
 }
 
-func (o *Order) SetStatus(status Status) {
-	o.status = status
-	if status == StatusProcessed || status == StatusInvalid {
+func (o *Order) Version() int64 {
+	return o.version
+}
+
+// TransitionTo performs a safe transition to a new state with validation
+func (o *Order) TransitionTo(newStatus Status, stateMachine *StateMachine) error {
+	if err := stateMachine.ValidateTransition(o.status, newStatus); err != nil {
+		return err
+	}
+
+	o.status = newStatus
+	o.version++
+
+	if newStatus == StatusProcessed || newStatus == StatusInvalid {
 		now := time.Now()
 		o.processedAt = &now
 	}
+
+	return nil
+}
+
+// IncrementVersion increments the order version (for repository use)
+func (o *Order) IncrementVersion() {
+	o.version++
 }
 
 func (o *Order) SetAccrual(accrual float64) {
@@ -89,7 +109,7 @@ func (o *Order) SetAccrual(accrual float64) {
 }
 
 // NewOrderFromRepository creates a new Order instance from repository data
-func NewOrderFromRepository(id ID, userID user.UserID, number string, status Status, accrual *float64, uploadedAt time.Time, processedAt *time.Time) *Order {
+func NewOrderFromRepository(id ID, userID user.UserID, number string, status Status, accrual *float64, uploadedAt time.Time, processedAt *time.Time, version int64) *Order {
 	return &Order{
 		id:          id,
 		userID:      userID,
@@ -98,5 +118,6 @@ func NewOrderFromRepository(id ID, userID user.UserID, number string, status Sta
 		accrual:     accrual,
 		uploadedAt:  uploadedAt,
 		processedAt: processedAt,
+		version:     version,
 	}
 }

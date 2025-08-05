@@ -5,85 +5,73 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/radiophysiker/d56/internal/domain"
 	"github.com/radiophysiker/d56/internal/domain/order"
 	"github.com/radiophysiker/d56/internal/domain/user"
 )
 
 type OrderService struct {
-	orderRepo order.Repository
-	userRepo  user.Repository
+	uowFactory   domain.UnitOfWorkFactory
+	stateMachine *order.StateMachine
 }
 
-func NewOrderService(
-	orderRepo order.Repository,
-	userRepo user.Repository,
-) *OrderService {
+func NewOrderService(uowFactory domain.UnitOfWorkFactory) *OrderService {
 	return &OrderService{
-		orderRepo: orderRepo,
-		userRepo:  userRepo,
+		uowFactory:   uowFactory,
+		stateMachine: order.NewStateMachine(),
 	}
 }
 
 func (s *OrderService) CreateOrder(ctx context.Context, userID user.UserID, number string) (isNew bool, err error) {
-	existingOrder, err := s.orderRepo.FindByNumber(ctx, number)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return false, err
-	}
+	var result bool
 
-	if existingOrder != nil {
-		if existingOrder.UserID() == userID {
-			return false, nil
+	err = ExecuteInTransaction(ctx, s.uowFactory, func(ctx context.Context, uow domain.UnitOfWork) error {
+		existingOrder, err := uow.OrderRepository().FindByNumber(ctx, number)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
 		}
-		return false, order.ErrOrderAlreadyTaken
-	}
 
-	newOrder, err := order.New(userID, number)
-	if err != nil {
-		return false, err
-	}
+		if existingOrder != nil {
+			if existingOrder.UserID() == userID {
+				result = false
+				return nil
+			}
+			return order.ErrOrderAlreadyTaken
+		}
 
-	if err := s.orderRepo.Save(ctx, newOrder); err != nil {
-		return false, err
-	}
+		newOrder, err := order.New(userID, number)
+		if err != nil {
+			return err
+		}
 
-	return true, nil
+		if err := uow.OrderRepository().Save(ctx, newOrder); err != nil {
+			return err
+		}
+
+		result = true
+		return nil
+	})
+
+	return result, err
 }
 
 // GetUserOrders retrieves all orders for a specific user
 func (s *OrderService) GetUserOrders(ctx context.Context, userID user.UserID) ([]*order.Order, error) {
-	return s.orderRepo.FindByUserID(ctx, userID)
-}
-
-// UpdateOrderStatus updates the status of an order and handles accrual if applicable
-func (s *OrderService) UpdateOrderStatus(ctx context.Context, orderNumber string, status order.Status, accrual *float64) error {
-	orderEntity, err := s.orderRepo.FindByNumber(ctx, orderNumber)
+	uow, err := s.uowFactory.Create(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	defer uow.Close()
 
-	orderEntity.SetStatus(status)
-	if accrual != nil && status == order.StatusProcessed {
-		orderEntity.SetAccrual(*accrual)
-
-		if *accrual > 0 {
-			user, err := s.userRepo.FindByID(ctx, orderEntity.UserID())
-			if err != nil {
-				return err
-			}
-
-			user.AddBalance(*accrual)
-			if err := s.userRepo.Update(ctx, user); err != nil {
-				return err
-			}
-		}
-	} else if status == order.StatusInvalid {
-		// Clear accrual for invalid orders
-		orderEntity.SetAccrual(0.0)
-	}
-
-	return s.orderRepo.Update(ctx, orderEntity)
+	return uow.OrderRepository().FindByUserID(ctx, userID)
 }
 
 func (s *OrderService) GetPendingOrders(ctx context.Context) ([]*order.Order, error) {
-	return s.orderRepo.FindPendingOrders(ctx)
+	uow, err := s.uowFactory.Create(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer uow.Close()
+
+	return uow.OrderRepository().FindPendingOrders(ctx)
 }

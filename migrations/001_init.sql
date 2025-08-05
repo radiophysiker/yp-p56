@@ -19,10 +19,13 @@ CREATE TABLE IF NOT EXISTS orders (
     accrual       NUMERIC(20,2) NULL,
     uploaded_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     processed_at  TIMESTAMPTZ NULL,
+    version       INTEGER NOT NULL DEFAULT 1,
     CONSTRAINT accrual_non_negative CHECK (accrual IS NULL OR accrual >= 0)
 );
 
 CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
+CREATE INDEX IF NOT EXISTS idx_orders_number_version ON orders(number, version);
+CREATE INDEX IF NOT EXISTS idx_orders_status_processing ON orders(status) WHERE status = 'PROCESSING';
 
 CREATE TABLE IF NOT EXISTS withdrawals (
     id            BIGSERIAL PRIMARY KEY,
@@ -41,6 +44,8 @@ CREATE INDEX IF NOT EXISTS idx_withdrawals_user_id ON withdrawals(user_id);
 DROP INDEX IF EXISTS idx_withdrawals_user_id;
 DROP TABLE IF EXISTS withdrawals;
 
+DROP INDEX IF EXISTS idx_orders_status_processing;
+DROP INDEX IF EXISTS idx_orders_number_version;
 DROP INDEX IF EXISTS idx_orders_user_id;
 DROP TABLE IF EXISTS orders;
 

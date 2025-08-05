@@ -63,3 +63,59 @@ func (r *WithdrawalRepository) FindByUserID(ctx context.Context, userID user.Use
 
 	return withdrawals, rows.Err()
 }
+
+// WithdrawalRepositoryWithTx implements the withdrawal.Repository interface for PostgreSQL with transaction support
+type WithdrawalRepositoryWithTx struct {
+	tx *sqlx.Tx
+}
+
+// NewWithdrawalRepositoryWithTx creates a new WithdrawalRepositoryWithTx with the given transaction
+func NewWithdrawalRepositoryWithTx(tx *sqlx.Tx) *WithdrawalRepositoryWithTx {
+	return &WithdrawalRepositoryWithTx{tx: tx}
+}
+
+func (r *WithdrawalRepositoryWithTx) Save(ctx context.Context, w *withdrawal.Withdrawal) error {
+	query := `
+		INSERT INTO withdrawals (user_id, order_number, amount, processed_at)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+	`
+	var id withdrawal.WithdrawalID
+	return r.tx.QueryRowContext(ctx, query,
+		w.UserID(), w.OrderNumber(), w.Amount(), w.ProcessedAt()).Scan(&id)
+}
+
+func (r *WithdrawalRepositoryWithTx) FindByUserID(ctx context.Context, userID user.UserID) ([]*withdrawal.Withdrawal, error) {
+	query := `
+		SELECT id, user_id, order_number, amount, processed_at 
+		FROM withdrawals 
+		WHERE user_id = $1 
+		ORDER BY processed_at DESC
+	`
+
+	rows, err := r.tx.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var withdrawals []*withdrawal.Withdrawal
+	for rows.Next() {
+		var id withdrawal.WithdrawalID
+		var uid user.UserID
+		var orderNumber string
+		var amount float64
+		var processedAt time.Time
+
+		err := rows.Scan(&id, &uid, &orderNumber, &amount, &processedAt)
+		if err != nil {
+			return nil, err
+		}
+
+		withdrawals = append(withdrawals, withdrawal.NewWithdrawalFromRepository(
+			id, uid, orderNumber, amount, processedAt,
+		))
+	}
+
+	return withdrawals, rows.Err()
+}

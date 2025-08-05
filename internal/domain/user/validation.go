@@ -46,7 +46,7 @@ func (ve ValidationErrors) HasErrors() bool {
 
 // Constants for validation rules
 const (
-	MinLoginLength    = 6
+	MinLoginLength    = 4
 	MinPasswordLength = 6
 	MaxLoginLength    = 50
 	MaxPasswordLength = 128

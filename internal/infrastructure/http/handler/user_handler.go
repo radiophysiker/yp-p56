@@ -255,11 +255,11 @@ func (h *UserHandler) WithdrawFunds(w http.ResponseWriter, r *http.Request) {
 
 	_, err := h.withdrawalService.WithdrawFunds(r.Context(), UserID, req.Order, req.Sum)
 	if err != nil {
-		if strings.Contains(err.Error(), "invalid order number format") {
+		if errors.Is(err, order.ErrInvalidFormat) {
 			http.Error(w, "Invalid order number format", http.StatusUnprocessableEntity)
 			return
 		}
-		if strings.Contains(err.Error(), "insufficient funds") {
+		if errors.Is(err, order.ErrInsufficientFunds) {
 			http.Error(w, "Insufficient funds", http.StatusPaymentRequired)
 			return
 		}

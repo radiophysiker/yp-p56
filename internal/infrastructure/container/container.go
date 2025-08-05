@@ -6,6 +6,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/radiophysiker/d56/internal/config"
+	"github.com/radiophysiker/d56/internal/domain"
 	"github.com/radiophysiker/d56/internal/domain/order"
 	"github.com/radiophysiker/d56/internal/domain/user"
 	"github.com/radiophysiker/d56/internal/domain/withdrawal"
@@ -30,7 +31,10 @@ type Container struct {
 	authMiddleware  *middleware.AuthMiddleware
 	httpRouter      *router.Router
 
-	// Repositories (Infrastructure Layer)
+	// Unit of Work Factory
+	uowFactory domain.UnitOfWorkFactory
+
+	// Repositories (Infrastructure Layer) - for read-only operations
 	userRepo       user.Repository
 	orderRepo      order.Repository
 	withdrawalRepo withdrawal.Repository
@@ -88,6 +92,9 @@ func (c *Container) initInfrastructure(cfg *config.Config, logger *zap.Logger) e
 	}
 	c.dbConnection = dbConn
 
+	// Initialize Unit of Work Factory
+	c.uowFactory = database.NewUnitOfWorkFactory(dbConn.GetDB())
+
 	c.passwordService = password.NewBcryptService()
 
 	jwtService, err := jwt.NewService(cfg.JWTSecretKey)
@@ -117,16 +124,19 @@ func (c *Container) initRepositories() {
 // initServices initializes the services
 func (c *Container) initServices(logger *zap.Logger) {
 	c.userService = service.NewUserService(c.userRepo, c.passwordService)
-	c.orderService = service.NewOrderService(c.orderRepo, c.userRepo)
-	c.withdrawalService = service.NewWithdrawalService(c.withdrawalRepo, c.userRepo)
+	c.orderService = service.NewOrderService(c.uowFactory)
+	c.withdrawalService = service.NewWithdrawalService(c.uowFactory)
+
+	// Initialize OrderStateManager for safe state transitions
+	orderStateManager := service.NewOrderStateManager(c.uowFactory)
 
 	// Initialize AccrualProcessorService if accrual client is available
 	if c.accrualClient != nil {
-		c.accrualProcessorService = service.NewAccrualProcessorService(c.accrualClient, c.orderService, logger)
+		c.accrualProcessorService = service.NewAccrualProcessorService(c.accrualClient, c.orderService, orderStateManager, logger)
 	}
 }
 
-// initHandlers инициализирует хендлеры
+// initHandlers initializes handlers
 func (c *Container) initHandlers() {
 	c.userHandler = handler.NewUserHandler(
 		c.userService,
@@ -136,7 +146,7 @@ func (c *Container) initHandlers() {
 	)
 }
 
-// initRouter инициализирует роутер
+// initRouter initializes router
 func (c *Container) initRouter(logger *zap.Logger) {
 	c.httpRouter = router.NewRouter(c.userHandler, c.authMiddleware, logger)
 }
