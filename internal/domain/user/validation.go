@@ -117,7 +117,7 @@ func ValidatePassword(password string) ValidationErrors {
 	if !hasMinimumComplexityPassword(password) {
 		errors = append(errors, ValidationError{
 			Field:   "password",
-			Message: "password must contain at least one number and one letter (uppercase and lowercase)",
+			Message: "password must contain at least one number and one letter",
 		})
 	}
 

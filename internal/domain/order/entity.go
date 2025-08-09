@@ -29,7 +29,7 @@ type Order struct {
 }
 
 func New(userID user.UserID, number string) (*Order, error) {
-	if userID.String() == "" {
+	if userID == (user.UserID{}) {
 		return nil, ErrUserIDEmpty
 	}
 

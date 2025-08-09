@@ -18,7 +18,7 @@ type Withdrawal struct {
 }
 
 func New(userID user.UserID, orderNumber string, amount float64) (*Withdrawal, error) {
-	if userID.String() == "" {
+	if userID == (user.UserID{}) {
 		return nil, ErrUserIDEmpty
 	}
 
