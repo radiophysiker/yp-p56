@@ -8,18 +8,23 @@ import (
 	"github.com/radiophysiker/d56/internal/domain/withdrawal"
 )
 
-// UnitOfWork represents a unit of work pattern for managing transactions
-type UnitOfWork interface {
-	// Repositories
+type Repositories interface {
 	UserRepository() user.Repository
 	OrderRepository() order.Repository
 	WithdrawalRepository() withdrawal.Repository
+}
 
-	// Transaction management
+type Transaction interface {
 	Begin(ctx context.Context) error
 	Commit(ctx context.Context) error
 	Rollback(ctx context.Context) error
 	Close() error
+}
+
+// UnitOfWork represents a unit of work pattern for managing transactions
+type UnitOfWork interface {
+	Repositories
+	Transaction
 }
 
 // UnitOfWorkFactory creates new UnitOfWork instances

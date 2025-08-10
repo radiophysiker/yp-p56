@@ -13,7 +13,15 @@ var (
 	ErrInsufficientFunds    = errors.New("insufficient funds")
 )
 
-type Repository interface {
-	Save(ctx context.Context, withdrawal *Withdrawal) error
+type Reader interface {
 	FindByUserID(ctx context.Context, userID user.UserID) ([]*Withdrawal, error)
+}
+
+type Writer interface {
+	Save(ctx context.Context, w *Withdrawal) error
+}
+
+type Repository interface {
+	Reader
+	Writer
 }

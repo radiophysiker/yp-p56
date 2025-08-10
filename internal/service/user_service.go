@@ -12,6 +12,9 @@ type UserService struct {
 	passwordService user.PasswordService
 }
 
+// ErrInvalidCredentials is returned when authentication fails due to wrong login or password.
+var ErrInvalidCredentials = errors.New("invalid credentials")
+
 func NewUserService(userRepo user.Repository, passwordService user.PasswordService) *UserService {
 	return &UserService{
 		userRepo:        userRepo,
@@ -44,11 +47,11 @@ func (s *UserService) Register(ctx context.Context, login, password string) (*us
 func (s *UserService) Authenticate(ctx context.Context, login, password string) (*user.User, error) {
 	u, err := s.userRepo.FindByLogin(ctx, login)
 	if err != nil {
-		return nil, errors.New("invalid credentials")
+		return nil, ErrInvalidCredentials
 	}
 
 	if !s.passwordService.CheckPassword(u.PasswordHash(), password) {
-		return nil, errors.New("invalid credentials")
+		return nil, ErrInvalidCredentials
 	}
 
 	return u, nil

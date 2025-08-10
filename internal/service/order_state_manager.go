@@ -69,17 +69,21 @@ func (m *OrderStateManager) attemptTransition(ctx context.Context, orderNumber s
 			return fmt.Errorf("failed to transition order state: %w", err)
 		}
 
-		if newStatus == order.StatusProcessed && accrual != nil && *accrual > 0 {
-			orderEntity.SetAccrual(*accrual)
+		if newStatus == order.StatusProcessed {
+			if accrual != nil && *accrual > 0 {
+				orderEntity.SetAccrual(*accrual)
 
-			user, err := uow.UserRepository().FindByID(ctx, orderEntity.UserID())
-			if err != nil {
-				return fmt.Errorf("failed to find user: %w", err)
-			}
+				user, err := uow.UserRepository().FindByID(ctx, orderEntity.UserID())
+				if err != nil {
+					return fmt.Errorf("failed to find user: %w", err)
+				}
 
-			user.AddBalance(*accrual)
-			if err := uow.UserRepository().Update(ctx, user); err != nil {
-				return fmt.Errorf("failed to update user balance: %w", err)
+				user.AddBalance(*accrual)
+				if err := uow.UserRepository().Update(ctx, user); err != nil {
+					return fmt.Errorf("failed to update user balance: %w", err)
+				}
+			} else {
+				orderEntity.SetAccrual(0.0)
 			}
 		} else if newStatus == order.StatusInvalid {
 			orderEntity.SetAccrual(0.0)

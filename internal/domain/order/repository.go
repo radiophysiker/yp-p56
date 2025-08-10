@@ -16,10 +16,18 @@ var (
 	ErrInsufficientFunds = errors.New("insufficient funds")
 )
 
-type Repository interface {
-	Save(ctx context.Context, order *Order) error
+type Reader interface {
 	FindByNumber(ctx context.Context, number string) (*Order, error)
 	FindByUserID(ctx context.Context, userID user.UserID) ([]*Order, error)
 	FindPendingOrders(ctx context.Context) ([]*Order, error)
+}
+
+type Writer interface {
+	Save(ctx context.Context, order *Order) error
 	Update(ctx context.Context, order *Order) error
+}
+
+type Repository interface {
+	Reader
+	Writer
 }
